@@ -1,9 +1,9 @@
 from fastapi import Depends, FastAPI , HTTPException
 from sqlalchemy.orm import Session
-from .schemas import PatientResponse , PatientCreate , PatientUpdate
+from .schemas import GlucoseReadingResponse, PatientResponse , PatientCreate , PatientUpdate , CreateGlucoseReading
 
 from .database import get_db
-from .models import Patient
+from .models import GlucoseReading, Patient
 
 
 app = FastAPI()
@@ -102,3 +102,59 @@ def update_patient(
     db.refresh(patient)
 
     return patient
+
+
+
+
+
+@app.post("/glucose-readings",response_model=GlucoseReadingResponse
+)
+def create_glucose_reading(
+    reading: CreateGlucoseReading,
+    db: Session = Depends(get_db)
+):
+    patient = db.query(Patient).filter(
+        Patient.id == reading.patient_id
+    ).first()
+
+    if patient is None:
+        raise HTTPException(
+            status_code=404,
+            detail="Patient not found"
+        )
+
+    new_reading = GlucoseReading(
+        patient_id=reading.patient_id,
+        glucose_level=reading.glucose_level,
+        timestamp=reading.timestamp,
+        source=reading.source
+    )
+
+    db.add(new_reading)
+    db.commit()
+    db.refresh(new_reading)
+
+    return new_reading
+
+
+
+@app.get("/patients/{patient_id}/glucose-readings", response_model=list[GlucoseReadingResponse]
+)
+def get_patient_glucose_readings(
+    patient_id: int,
+    db: Session = Depends(get_db)):
+    patient = db.query(Patient).filter(
+        Patient.id == patient_id
+    ).first()
+
+    if patient is None:
+        raise HTTPException(
+            status_code=404,
+            detail="Patient not found"
+        )
+
+    readings = db.query(GlucoseReading).filter(
+        GlucoseReading.patient_id == patient_id
+    ).order_by(GlucoseReading.timestamp.desc()).all()
+
+    return readings

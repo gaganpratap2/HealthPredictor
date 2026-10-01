@@ -22,3 +22,21 @@ class PatientUpdate(BaseModel):
     name: str | None = None
     age: int | None = None
     gender: str | None = None
+
+
+class CreateGlucoseReading(BaseModel):
+    patient_id: int
+    glucose_level: float
+    timestamp: datetime | None = None
+    source: str | None = None
+
+
+class GlucoseReadingResponse(BaseModel):
+    id: int
+    patient_id: int
+    glucose_level: float
+    timestamp: datetime
+    source: str | None
+    created_at: datetime
+
+    model_config = ConfigDict(from_attributes=True)
