@@ -1,9 +1,9 @@
 from fastapi import Depends, FastAPI , HTTPException
 from sqlalchemy.orm import Session
-from .schemas import GlucoseReadingResponse, PatientResponse , PatientCreate , PatientUpdate , CreateGlucoseReading
+from .schemas import CreateWearableEvent, GlucoseReadingResponse, PatientResponse , PatientCreate , PatientUpdate , CreateGlucoseReading , CreateClinicalRecord , ClinicalRecordResponse, WearableEventResponse 
 
 from .database import get_db
-from .models import GlucoseReading, Patient
+from .models import ClinicalRecord, GlucoseReading, Patient , WearableEvent
 
 
 app = FastAPI()
@@ -158,3 +158,125 @@ def get_patient_glucose_readings(
     ).order_by(GlucoseReading.timestamp.desc()).all()
 
     return readings
+
+
+@app.post( "/clinical-records", response_model=ClinicalRecordResponse
+)
+def create_clinical_record(
+    record: CreateClinicalRecord,
+    db: Session = Depends(get_db)
+):
+    patient = db.query(Patient).filter(
+        Patient.id == record.patient_id
+    ).first()
+
+    if patient is None:
+        raise HTTPException(
+            status_code=404,
+            detail="Patient not found"
+        )
+
+    new_record = ClinicalRecord(
+        patient_id=record.patient_id,
+        record_type=record.record_type,
+        description=record.description,
+        record_date=record.record_date
+    )
+
+    db.add(new_record)
+    db.commit()
+    db.refresh(new_record)
+
+    return new_record
+
+@app.get("/patients/{patient_id}/clinical-records", response_model=list[ClinicalRecordResponse])
+def get_patient_clinical_records(
+    patient_id: int,
+    db: Session = Depends(get_db)
+):
+    patient = db.query(Patient).filter(
+        Patient.id == patient_id
+    ).first()
+
+    if patient is None:
+        raise HTTPException(
+            status_code=404,
+            detail="Patient not found"
+        )
+
+    records = db.query(ClinicalRecord).filter(
+        ClinicalRecord.patient_id == patient_id
+    ).order_by(ClinicalRecord.record_date.desc()).all()
+
+    return records
+
+
+
+@app.post(
+    "/wearable-events",
+    response_model=WearableEventResponse
+)
+def create_wearable_event(
+    event: CreateWearableEvent,
+    db: Session = Depends(get_db)
+):
+    patient = db.query(Patient).filter(
+        Patient.id == event.patient_id
+    ).first()
+
+    if patient is None:
+        raise HTTPException(
+            status_code=404,
+            detail="Patient not found"
+        )
+
+    existing_event = db.query(WearableEvent).filter(
+        WearableEvent.event_id == event.event_id
+    ).first()
+
+    if existing_event is not None:
+        return existing_event
+
+    new_event = WearableEvent(
+        patient_id=event.patient_id,
+        event_id=event.event_id,
+        timestamp=event.timestamp,
+        heart_rate=event.heart_rate,
+        hrv=event.hrv,
+        spo2=event.spo2,
+        glucose_level=event.glucose_level,
+        steps=event.steps,
+        sleep_state=event.sleep_state,
+        activity_state=event.activity_state,
+        source=event.source
+    )
+
+    db.add(new_event)
+    db.commit()
+    db.refresh(new_event)
+
+    return new_event
+
+@app.get("/patients/{patient_id}/wearable-events",response_model=list[WearableEventResponse]
+)
+def get_patient_wearable_events(
+    patient_id: int,
+    db: Session = Depends(get_db)
+):
+    patient = db.query(Patient).filter(
+        Patient.id == patient_id
+    ).first()
+
+    if patient is None:
+        raise HTTPException(
+            status_code=404,
+            detail="Patient not found"
+        )
+
+    events = db.query(WearableEvent).filter(
+        WearableEvent.patient_id == patient_id
+    ).order_by(
+        WearableEvent.timestamp.desc()
+    ).all()
+
+    return events
