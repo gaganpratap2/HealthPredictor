@@ -5,6 +5,8 @@ from .schemas import CreateWearableEvent, GlucoseReadingResponse, PatientRespons
 from .database import get_db
 from .models import ClinicalRecord, GlucoseReading, Patient , WearableEvent
 
+from datetime import datetime
+from app.services.twin_service import build_patient_twin
 
 app = FastAPI()
 
@@ -19,7 +21,8 @@ def health():
     return {"status": "healthy"}
 
 
-@app.get("/patients" , response_model=list[PatientResponse])
+@app.get("/patients" , response_model=list[PatientResponse]) 
+#response_model=list[PatientResponse]: "The response should be a list of PatientResponse objects."
 def get_patients(db: Session = Depends(get_db)):
     patients = db.query(Patient).all()
 
@@ -107,8 +110,7 @@ def update_patient(
 
 
 
-@app.post("/glucose-readings",response_model=GlucoseReadingResponse
-)
+@app.post("/glucose-readings",response_model=GlucoseReadingResponse)
 def create_glucose_reading(
     reading: CreateGlucoseReading,
     db: Session = Depends(get_db)
@@ -273,6 +275,7 @@ def get_patient_wearable_events(
             detail="Patient not found"
         )
 
+    
     events = db.query(WearableEvent).filter(
         WearableEvent.patient_id == patient_id
     ).order_by(
@@ -280,3 +283,25 @@ def get_patient_wearable_events(
     ).all()
 
     return events
+
+
+
+@app.get("/patients/{patient_id}/twin")
+def get_patient_twin(
+    patient_id: int,
+    db: Session = Depends(get_db)
+):
+    twin = build_patient_twin(
+        db=db,
+        patient_id=patient_id,
+        current_time=datetime.now(),
+        window_minutes=60,
+    )
+
+    if twin is None:
+        raise HTTPException(
+            status_code=404,
+            detail="No recent wearable data found"
+        )
+
+    return twin
