@@ -1,9 +1,12 @@
-from datetime import datetime
+# What is the patient's current computational state?
 
-from app.services.time_features import (
-    calculate_z_score,
-    detect_trend,
+from datetime import datetime
+from app.services.anomaly_detection import (
+    detect_glucose_anomaly,
+    build_anomaly_context,
 )
+from app.services.time_features import detect_trend
+
 
 
 def build_twin_state(
@@ -14,28 +17,36 @@ def build_twin_state(
     baseline_std,
     data_quality,
 ):
-    glucose_features = features.get(
-        "glucose_level",
-        {}
+    glucose_features = features.get("glucose_level", {})
+
+    glucose = current_values.get("glucose_level")
+    glucose_change = glucose_features.get("change")
+
+    trend = detect_trend(glucose_change)
+
+    if glucose is not None and baseline_mean is not None:
+        deviation = glucose - baseline_mean
+    else:
+        deviation = None
+
+    if deviation is not None and baseline_std:
+        z_score = deviation / baseline_std
+    else:
+        z_score = None
+
+    anomaly = detect_glucose_anomaly(
+        z_score=z_score,
+        trend=trend,
     )
 
-    glucose = current_values.get(
-        "glucose_level"
-    )
-
-    glucose_change = glucose_features.get(
-        "change"
-    )
-
-    glucose_z_score = calculate_z_score(
-        current_value=glucose,
-        baseline_mean=baseline_mean,
-        baseline_std=baseline_std,
+    anomaly_context = build_anomaly_context(
+    glucose_anomaly=anomaly,
+    data_quality=data_quality,
+    current_values=current_values,
     )
 
     return {
         "patient_id": patient_id,
-
         "updated_at": datetime.utcnow(),
 
         "vitals": {
@@ -57,16 +68,13 @@ def build_twin_state(
         "glucose_state": {
             "baseline": baseline_mean,
             "baseline_std": baseline_std,
-            "deviation": (
-                glucose - baseline_mean
-                if glucose is not None
-                and baseline_mean is not None
-                else None
-            ),
-            "z_score": glucose_z_score,
+            "deviation": deviation,
+            "z_score": z_score,
             "change": glucose_change,
-            "trend": detect_trend(glucose_change),
+            "trend": trend,
         },
+
+        "anomaly": anomaly,
 
         "data_quality": data_quality,
 

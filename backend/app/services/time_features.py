@@ -1,3 +1,5 @@
+# What are the measurements and statistical features?
+
 from datetime import datetime, timedelta
 from statistics import mean, stdev
 
