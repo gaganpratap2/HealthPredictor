@@ -6,7 +6,7 @@ from app.services.anomaly_detection import (
     build_anomaly_context,
 )
 from app.services.time_features import detect_trend
-
+from app.services.time_features import calculate_temporal_features
 
 
 def build_twin_state(
@@ -16,6 +16,8 @@ def build_twin_state(
     baseline_mean,
     baseline_std,
     data_quality,
+    readings,
+    current_time,
 ):
     glucose_features = features.get("glucose_level", {})
 
@@ -45,6 +47,23 @@ def build_twin_state(
     current_values=current_values,
     )
 
+    signals = [
+    "glucose_level",
+    "heart_rate",
+    "hrv",
+    "spo2",
+    ]
+
+    temporal_state = {}
+
+    for signal in signals:
+        temporal_state[signal] = calculate_temporal_features(
+        readings=readings,
+        signal=signal,
+        current_time=current_time,
+    )
+
+
     return {
         "patient_id": patient_id,
         "updated_at": datetime.utcnow(),
@@ -73,6 +92,8 @@ def build_twin_state(
             "change": glucose_change,
             "trend": trend,
         },
+
+        "temporal_state": temporal_state,
 
         "anomaly": anomaly,
 

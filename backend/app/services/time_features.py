@@ -230,3 +230,107 @@ def calculate_z_score(
         (current_value - baseline_mean)
         / baseline_std
     )
+
+
+def calculate_rate_of_change(readings, signal):
+    readings = sorted(
+        readings,
+        key=lambda reading: reading["timestamp"]
+    )
+
+    valid_readings = [
+        reading
+        for reading in readings
+        if reading.get(signal) is not None
+    ]
+
+    if len(valid_readings) < 2:
+        return None
+
+    first = valid_readings[0]
+    last = valid_readings[-1]
+
+    value_change = last[signal] - first[signal]
+
+    time_change = (
+        last["timestamp"] - first["timestamp"]
+    ).total_seconds() / 60
+
+    if time_change <= 0:
+        return None
+
+    return value_change / time_change
+
+
+def calculate_signal_freshness(
+    readings,
+    current_time,
+    signal,
+):
+    valid_readings = [
+        reading
+        for reading in readings
+        if reading.get(signal) is not None
+    ]
+
+    if not valid_readings:
+        return None
+
+    latest = max(
+        valid_readings,
+        key=lambda reading: reading["timestamp"]
+    )
+
+    freshness = (
+        current_time - latest["timestamp"]
+    ).total_seconds()
+
+    if freshness < 0:
+        return None
+
+    return freshness
+
+
+def calculate_volatility(readings, signal):
+    values = [
+        reading[signal]
+        for reading in readings
+        if reading.get(signal) is not None
+    ]
+
+    if len(values) < 2:
+        return None
+
+    return stdev(values)
+
+
+def calculate_temporal_features(
+    readings,
+    signal,
+    current_time=None,
+):
+    features = calculate_signal_features(
+        readings,
+        signal,
+    )
+
+    features["rate_of_change"] = calculate_rate_of_change(
+        readings,
+        signal,
+    )
+
+    features["volatility"] = calculate_volatility(
+        readings,
+        signal,
+    )
+
+    if current_time is not None:
+        features["freshness_seconds"] = calculate_signal_freshness(
+            readings,
+            current_time,
+            signal,
+        )
+    else:
+        features["freshness_seconds"] = None
+
+    return features

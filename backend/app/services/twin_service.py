@@ -115,4 +115,6 @@ def build_patient_twin(
         baseline_mean=baseline.get("mean"),
         baseline_std=baseline.get("std"),
         data_quality=data_quality,
-    )
+        readings=readings,
+        current_time=current_time,
+)
