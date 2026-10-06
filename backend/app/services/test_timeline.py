@@ -13,5 +13,5 @@ print("\nPATIENT TIMELINE")
 
 for event in timeline:
     print(event)
-
+    
 db.close()
