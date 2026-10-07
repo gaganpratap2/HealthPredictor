@@ -172,3 +172,27 @@ def generate_population(
         all_readings.extend(patient_readings)
 
     return all_readings
+
+
+def generate_population(
+    number_of_patients,
+    start_time,
+    rng,
+):
+    all_readings = []
+
+    for patient_id in range(1, number_of_patients + 1):
+        patient = generate_patient_profile(
+            patient_id=patient_id,
+            rng=rng,
+        )
+
+        patient_readings = generate_patient_day(
+            patient=patient,
+            start_time=start_time,
+            rng=rng,
+        )
+
+        all_readings.extend(patient_readings)
+
+    return all_readings

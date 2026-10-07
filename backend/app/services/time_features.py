@@ -10,6 +10,7 @@ def calculate_basic_features(readings):
     readings = sorted(
         readings,
         key=lambda reading: reading["timestamp"]
+        # key=lambda reading: reading["timestamp"] :: "For every reading, look at its timestamp."
     )
 
     values = [
