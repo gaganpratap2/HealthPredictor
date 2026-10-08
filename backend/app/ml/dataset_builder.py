@@ -8,10 +8,12 @@ def build_prediction_observation(
     all_readings,
 ):
     prediction_time = reading["timestamp"]
+    patient_id = reading["patient_id"]
 
     baseline_glucose = calculate_historical_baseline(
         readings=all_readings,
         prediction_time=prediction_time,
+        patient_id=patient_id,
     )
 
     if baseline_glucose is None:
@@ -20,6 +22,7 @@ def build_prediction_observation(
     future = find_future_glucose(
         readings=all_readings,
         prediction_time=prediction_time,
+        patient_id=patient_id,
     )
 
     if future is None:
@@ -36,17 +39,14 @@ def build_prediction_observation(
         return None
 
     return {
-        "patient_id": reading["patient_id"],
+        "patient_id": patient_id,
         "timestamp": prediction_time,
-
         "glucose": reading.get("glucose_level"),
         "heart_rate": reading.get("heart_rate"),
         "hrv": reading.get("hrv"),
         "spo2": reading.get("spo2"),
         "steps": reading.get("steps"),
-
         "glucose_baseline": baseline_glucose,
-
         "target_future_glucose": future_glucose,
         "target_glucose_spike": spike,
     }

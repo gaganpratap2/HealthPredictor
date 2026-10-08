@@ -4,12 +4,14 @@ from statistics import mean
 def calculate_historical_baseline(
     readings,
     prediction_time,
+    patient_id,
 ):
     historical_values = [
         reading["glucose_level"]
         for reading in readings
         if (
-            reading["timestamp"] < prediction_time
+            reading["patient_id"] == patient_id
+            and reading["timestamp"] < prediction_time
             and reading.get("glucose_level") is not None
         )
     ]
