@@ -1,7 +1,8 @@
 from dataclasses import dataclass
-import random
 from datetime import datetime, timedelta
 import math
+import random
+
 
 @dataclass
 class SyntheticPatient:
@@ -13,6 +14,8 @@ class SyntheticPatient:
     spo2_baseline: float
     meal_response: float
 
+
+MEAL_HOURS = [8, 13, 19]
 
 
 def generate_patient_profile(patient_id, rng):
@@ -26,6 +29,7 @@ def generate_patient_profile(patient_id, rng):
         meal_response=rng.uniform(25, 50),
     )
 
+
 def get_activity_state(hour):
     if 7 <= hour < 8:
         return "walking"
@@ -38,13 +42,12 @@ def get_activity_state(hour):
 
     return "resting"
 
+
 def get_sleep_state(hour):
     if 23 <= hour or hour < 7:
         return "sleeping"
 
     return "awake"
-
-MEAL_HOURS = [8, 13, 19]
 
 
 def calculate_meal_effect(timestamp, meal_response):
@@ -71,11 +74,7 @@ def calculate_meal_effect(timestamp, meal_response):
     return effect
 
 
-def generate_observation(
-    patient,
-    timestamp,
-    rng,
-):
+def generate_observation(patient, timestamp, rng):
     hour = timestamp.hour
 
     activity = get_activity_state(hour)
@@ -98,21 +97,48 @@ def generate_observation(
     )
 
     if activity == "walking":
-        heart_rate = patient.resting_heart_rate + rng.uniform(15, 30)
-        hrv = patient.hrv_baseline - rng.uniform(5, 12)
+        heart_rate = (
+            patient.resting_heart_rate
+            + rng.uniform(15, 30)
+        )
+
+        hrv = (
+            patient.hrv_baseline
+            - rng.uniform(5, 12)
+        )
+
         steps = rng.randint(20, 60)
 
     elif sleep == "sleeping":
-        heart_rate = patient.resting_heart_rate - rng.uniform(5, 12)
-        hrv = patient.hrv_baseline + rng.uniform(3, 10)
+        heart_rate = (
+            patient.resting_heart_rate
+            - rng.uniform(5, 12)
+        )
+
+        hrv = (
+            patient.hrv_baseline
+            + rng.uniform(3, 10)
+        )
+
         steps = 0
 
     else:
-        heart_rate = patient.resting_heart_rate + rng.uniform(-5, 8)
-        hrv = patient.hrv_baseline + rng.uniform(-5, 5)
+        heart_rate = (
+            patient.resting_heart_rate
+            + rng.uniform(-5, 8)
+        )
+
+        hrv = (
+            patient.hrv_baseline
+            + rng.uniform(-5, 5)
+        )
+
         steps = rng.randint(0, 10)
 
-    spo2 = patient.spo2_baseline + rng.gauss(0, 0.3)
+    spo2 = (
+        patient.spo2_baseline
+        + rng.gauss(0, 0.3)
+    )
 
     return {
         "patient_id": patient.patient_id,
@@ -137,15 +163,40 @@ def generate_patient_day(
     current_time = start_time
 
     for _ in range(288):
-        reading = generate_observation(
+        readings.append(
+            generate_observation(
+                patient=patient,
+                timestamp=current_time,
+                rng=rng,
+            )
+        )
+
+        current_time += timedelta(minutes=5)
+
+    return readings
+
+
+def generate_patient_history(
+    patient,
+    start_time,
+    number_of_days,
+    rng,
+):
+    readings = []
+
+    for day in range(number_of_days):
+        day_start = (
+            start_time
+            + timedelta(days=day)
+        )
+
+        day_readings = generate_patient_day(
             patient=patient,
-            timestamp=current_time,
+            start_time=day_start,
             rng=rng,
         )
 
-        readings.append(reading)
-
-        current_time += timedelta(minutes=5)
+        readings.extend(day_readings)
 
     return readings
 
@@ -153,46 +204,29 @@ def generate_patient_day(
 def generate_population(
     number_of_patients,
     start_time,
+    number_of_days,
     rng,
 ):
     all_readings = []
 
-    for patient_id in range(1, number_of_patients + 1):
+    for patient_id in range(
+        1,
+        number_of_patients + 1,
+    ):
         patient = generate_patient_profile(
             patient_id=patient_id,
             rng=rng,
         )
 
-        patient_readings = generate_patient_day(
+        patient_readings = generate_patient_history(
             patient=patient,
             start_time=start_time,
+            number_of_days=number_of_days,
             rng=rng,
         )
 
-        all_readings.extend(patient_readings)
-
-    return all_readings
-
-
-def generate_population(
-    number_of_patients,
-    start_time,
-    rng,
-):
-    all_readings = []
-
-    for patient_id in range(1, number_of_patients + 1):
-        patient = generate_patient_profile(
-            patient_id=patient_id,
-            rng=rng,
+        all_readings.extend(
+            patient_readings
         )
-
-        patient_readings = generate_patient_day(
-            patient=patient,
-            start_time=start_time,
-            rng=rng,
-        )
-
-        all_readings.extend(patient_readings)
 
     return all_readings

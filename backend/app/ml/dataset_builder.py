@@ -5,13 +5,13 @@ from app.ml.target import calculate_glucose_spike
 
 def build_prediction_observation(
     reading,
-    all_readings,
+    patient_readings,
 ):
     prediction_time = reading["timestamp"]
     patient_id = reading["patient_id"]
 
     baseline_glucose = calculate_historical_baseline(
-        readings=all_readings,
+        readings=patient_readings,
         prediction_time=prediction_time,
         patient_id=patient_id,
     )
@@ -20,7 +20,7 @@ def build_prediction_observation(
         return None
 
     future = find_future_glucose(
-        readings=all_readings,
+        readings=patient_readings,
         prediction_time=prediction_time,
         patient_id=patient_id,
     )
@@ -50,3 +50,18 @@ def build_prediction_observation(
         "target_future_glucose": future_glucose,
         "target_glucose_spike": spike,
     }
+
+
+def build_patient_dataset(patient_readings):
+    dataset = []
+
+    for reading in patient_readings:
+        observation = build_prediction_observation(
+            reading=reading,
+            patient_readings=patient_readings,
+        )
+
+        if observation is not None:
+            dataset.append(observation)
+
+    return dataset

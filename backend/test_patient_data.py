@@ -2,6 +2,7 @@ import random
 from datetime import datetime
 
 from app.ml.synthetic_generator import generate_population
+from app.ml.patient_data import group_readings_by_patient
 
 
 rng = random.Random(42)
@@ -13,30 +14,20 @@ readings = generate_population(
     rng=rng,
 )
 
+grouped = group_readings_by_patient(readings)
+
 print("Total readings:")
 print(len(readings))
 
-patient_ids = sorted(
-    set(reading["patient_id"] for reading in readings)
-)
+print()
 
-print("\nPatients:")
-print(patient_ids)
+print("Number of patients:")
+print(len(grouped))
 
-for patient_id in patient_ids:
-    patient_readings = [
-        reading
-        for reading in readings
-        if reading["patient_id"] == patient_id
-    ]
+print()
 
+for patient_id, patient_readings in grouped.items():
     print(
         f"Patient {patient_id}: "
         f"{len(patient_readings)} readings"
     )
-
-print("\nFirst reading:")
-print(readings[0])
-
-print("\nLast reading:")
-print(readings[-1])
