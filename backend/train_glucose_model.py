@@ -1,6 +1,7 @@
+
 import random
 from datetime import datetime
-
+from app.ml.threshold_analysis import analyze_thresholds
 from app.ml.synthetic_generator import generate_population
 from app.ml.population_dataset import build_population_dataset
 from app.ml.dataset_split import split_by_patient
@@ -12,14 +13,15 @@ from app.ml.preprocessing import (
 )
 from app.ml.train import train_logistic_regression
 from app.ml.evaluation import evaluate_classifier
-
 from app.ml.error_analysis import analyze_predictions
+
+from app.ml.feature_analysis import analyze_logistic_coefficients
+from app.ml.dataset_matrix import FEATURE_NAMES
+# ---------------------------------
+# 1. Generate synthetic population
+# ---------------------------------
+
 rng = random.Random(42)
-
-
-# ---------------------------------
-# 1. Generate larger population
-# ---------------------------------
 
 readings = generate_population(
     number_of_patients=10,
@@ -28,6 +30,8 @@ readings = generate_population(
     rng=rng,
 )
 
+print("Raw readings:", len(readings))
+
 
 # ---------------------------------
 # 2. Build labeled dataset
@@ -35,20 +39,11 @@ readings = generate_population(
 
 dataset = build_population_dataset(readings)
 
-
-print("Raw readings:")
-print(len(readings))
-
-print()
-
-print("Labeled observations:")
-print(len(dataset))
-
-print()
+print("Labeled observations:", len(dataset))
 
 
 # ---------------------------------
-# 3. Patient-level split
+# 3. Split by patient
 # ---------------------------------
 
 train, validation, test = split_by_patient(
@@ -58,21 +53,9 @@ train, validation, test = split_by_patient(
     test_patients=[9, 10],
 )
 
-
-print("Train observations:")
-print(len(train))
-
-print()
-
-print("Validation observations:")
-print(len(validation))
-
-print()
-
-print("Test observations:")
-print(len(test))
-
-print()
+print("Train observations:", len(train))
+print("Validation observations:", len(validation))
+print("Test observations:", len(test))
 
 
 # ---------------------------------
@@ -87,7 +70,7 @@ def prepare_matrix(dataset):
         key=lambda observation: (
             observation["patient_id"],
             observation["timestamp"],
-        )
+        ),
     )
 
     previous_by_patient = {}
@@ -104,28 +87,48 @@ def prepare_matrix(dataset):
             previous_observation=previous_observation,
         )
 
+        # Update the previous observation for the next reading.
+        previous_by_patient[patient_id] = observation
+
+        # A glucose rate cannot be calculated without a
+        # previous observation.
         if features["glucose_rate"] is None:
-            previous_by_patient[patient_id] = observation
             continue
 
+        # Keep metadata for error analysis.
+        # These fields are NOT model inputs.
+        features["patient_id"] = patient_id
+        features["timestamp"] = observation["timestamp"]
         features["target_glucose_spike"] = (
             observation["target_glucose_spike"]
         )
 
         feature_rows.append(features)
 
-        previous_by_patient[patient_id] = observation
+    X, y = build_matrix(feature_rows)
 
-    return build_matrix(feature_rows)
+    # Verify that rows and labels remain aligned.
+    assert len(X) == len(y) == len(feature_rows)
+
+    return X, y, feature_rows
 
 
-X_train, y_train = prepare_matrix(train)
-X_validation, y_validation = prepare_matrix(validation)
-X_test, y_test = prepare_matrix(test)
+X_train, y_train, train_rows = prepare_matrix(train)
+
+X_validation, y_validation, validation_rows = (
+    prepare_matrix(validation)
+)
+
+X_test, y_test, test_rows = prepare_matrix(test)
+
+print()
+print("Prepared training rows:", len(train_rows))
+print("Prepared validation rows:", len(validation_rows))
+print("Prepared test rows:", len(test_rows))
 
 
 # ---------------------------------
-# 5. Fit scaler ONLY on training data
+# 5. Fit scaler on training data only
 # ---------------------------------
 
 scaler = fit_scaler(X_train)
@@ -155,39 +158,79 @@ model = train_logistic_regression(
     y_train=y_train,
 )
 
-
-# ---------------------------------
-# 7. Predictions
-# ---------------------------------
-
-train_predictions = model.predict(
-    X_train_scaled
+analyze_logistic_coefficients(
+    model=model,
+    feature_names=FEATURE_NAMES,
 )
+# ---------------------------------
+# 7. Generate predictions
+# ---------------------------------
+
+train_predictions = model.predict(X_train_scaled)
 
 validation_predictions = model.predict(
     X_validation_scaled
 )
 
-test_predictions = model.predict(
+test_predictions = model.predict(X_test_scaled)
+
+
+
+
+# Probability that each observation belongs to class 1.
+train_probabilities = model.predict_proba(
+    X_train_scaled
+)[:, 1]
+
+validation_probabilities = model.predict_proba(
+    X_validation_scaled
+)[:, 1]
+
+test_probabilities = model.predict_proba(
     X_test_scaled
+)[:, 1]
+
+analyze_thresholds(
+    y_true=y_validation,
+    probabilities=validation_probabilities,
 )
 
-
-train_probabilities = (
-    model.predict_proba(X_train_scaled)[:, 1]
-)
-
-validation_probabilities = (
-    model.predict_proba(X_validation_scaled)[:, 1]
-)
-
-test_probabilities = (
-    model.predict_proba(X_test_scaled)[:, 1]
-)
 
 
 # ---------------------------------
-# 8. Evaluation
+# Evaluate selected threshold
+# ---------------------------------
+
+SELECTED_THRESHOLD = 0.80
+
+test_predictions_at_threshold = [
+    int(probability >= SELECTED_THRESHOLD)
+    for probability in test_probabilities
+]
+
+threshold_test_metrics = evaluate_classifier(
+    y_true=y_test,
+    predictions=test_predictions_at_threshold,
+    probabilities=test_probabilities,
+)
+
+print()
+print("====== TEST: THRESHOLD 0.80 ======")
+print(threshold_test_metrics)
+
+
+
+# ---------------------------------
+# 8. Verify test prediction alignment
+# ---------------------------------
+
+assert len(test_rows) == len(y_test)
+assert len(test_rows) == len(test_predictions)
+assert len(test_rows) == len(test_probabilities)
+
+
+# ---------------------------------
+# 9. Evaluate the model
 # ---------------------------------
 
 train_metrics = evaluate_classifier(
@@ -209,40 +252,46 @@ test_metrics = evaluate_classifier(
 )
 
 
+# ---------------------------------
+# 10. Analyze real test errors
+# ---------------------------------
+
+
 false_positives, false_negatives = analyze_predictions(
-    dataset=test,
-    predictions=test_predictions,
+    dataset=test_rows,
+    predictions=test_predictions_at_threshold,
     probabilities=test_probabilities,
 )
 
+
 print()
-print("====== ERROR ANALYSIS ======")
+print("========== ERROR ANALYSIS ==========")
 print("False positives:", len(false_positives))
 print("False negatives:", len(false_negatives))
 
 print()
 print("First 10 false positives:")
-
 for item in false_positives[:10]:
     print(item)
 
 print()
 print("First 10 false negatives:")
-
 for item in false_negatives[:10]:
     print(item)
 
 
+# ---------------------------------
+# 11. Print evaluation metrics
+# ---------------------------------
 
+print()
 print("========== TRAIN ==========")
 print(train_metrics)
 
 print()
-
 print("====== VALIDATION ======")
 print(validation_metrics)
 
 print()
-
 print("========== TEST ==========")
 print(test_metrics)
